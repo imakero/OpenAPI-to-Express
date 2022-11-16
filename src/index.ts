@@ -8,7 +8,7 @@ import express, {
   Response,
 } from "express";
 import cors from "cors";
-import { pathPatternToExpress } from "./lib/helpers";
+import { expressPathToFilePath, pathPatternToExpress } from "./lib/helpers";
 import swaggerUi from "swagger-ui-express";
 import * as OpenApiValidator from "express-openapi-validator";
 import http from "http";
@@ -59,20 +59,30 @@ function addValidation(app: Application, doc: OpenAPIV3.Document) {
   );
 }
 
-function registerHandler(
+async function registerHandler(
   app: Application,
   servers: OpenAPIV3.ServerObject[] | undefined,
   verb: HttpVerb | "use",
   path: string,
   ...handlers: RequestHandler[]
 ) {
+  let serverObjects: OpenAPIV3.ServerObject[] = [];
   if (!servers || !servers.length) {
-    app[verb](path, ...handlers);
+    serverObjects = [{ url: "" }];
   } else {
-    servers.forEach((server) => {
-      app[verb](`${server.url}${path}`, ...handlers);
-    });
+    serverObjects = [...servers];
   }
+
+  serverObjects.forEach(async (server) => {
+    const requestHandlers: RequestHandler[] = [...handlers];
+
+    if (!handlers.length && verb !== "use") {
+      const handler = await getHandler(verb, `.${server.url}${path}`);
+      requestHandlers.push(handler);
+    }
+
+    app[verb](`${server.url}${path}`, ...requestHandlers);
+  });
 }
 
 function addDocumentation(app: Application, doc: OpenAPIV3.Document) {
@@ -136,24 +146,30 @@ function handlePattern(
   });
 }
 
-function generatePath(
+async function generatePath(
   app: Application,
   doc: OpenAPIV3.Document,
   pattern: string,
   verb: HttpVerb,
   operation: OpenAPIV3.OperationObject
 ) {
-  registerHandler(
-    app,
-    doc.servers || undefined,
-    verb,
-    pattern,
-    (req: Request, res: Response) => {
-      res
-        .status(200)
-        .json({ params: req.params, body: req.body, query: req.query });
+  registerHandler(app, doc.servers || undefined, verb, pattern);
+}
+
+async function getHandler(verb: HttpVerb, pattern: string) {
+  try {
+    const router = await import(expressPathToFilePath(pattern));
+    if (router[verb === "delete" ? "remove" : verb]) {
+      return router[verb === "delete" ? "remove" : verb];
     }
-  );
+  } catch (error) {
+    //console.error((error as Error).message);
+  }
+  return (req: Request, res: Response) => {
+    res
+      .status(200)
+      .json({ params: req.params, body: req.body, query: req.query });
+  };
 }
 
 start();
