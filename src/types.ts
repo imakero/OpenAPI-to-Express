@@ -8,6 +8,11 @@ export type HttpVerb =
   | "patch"
   | "trace";
 
+export interface ValidationError extends Error {
+  status: number;
+  errors: string[];
+}
+
 export namespace OpenAPIV3 {
   export interface Document {
     openapi: string;

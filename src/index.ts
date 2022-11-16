@@ -1,9 +1,17 @@
 import { parseYaml } from "./lib/parseYaml";
-import { HttpVerb, OpenAPIV3 } from "./types";
-import express, { Application, json, Request, Response } from "express";
+import { HttpVerb, OpenAPIV3, ValidationError } from "./types";
+import express, {
+  Application,
+  NextFunction,
+  Request,
+  RequestHandler,
+  Response,
+} from "express";
 import cors from "cors";
 import { pathPatternToExpress } from "./lib/helpers";
 import swaggerUi from "swagger-ui-express";
+import * as OpenApiValidator from "express-openapi-validator";
+import http from "http";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -12,20 +20,78 @@ async function start() {
   const doc = (await parseYaml(filename)) as OpenAPIV3.Document;
   const app = createServer();
   addDocumentation(app, doc);
+  addValidation(app, doc);
   generatePaths(app, doc);
-  app.listen(process.env.PORT, () =>
-    console.log(`App listening on port ${process.env.PORT}`)
+
+  app.use(
+    (
+      error: ValidationError,
+      req: Request,
+      res: Response,
+      next: NextFunction
+    ) => {
+      if (!error.status) {
+        next();
+      }
+
+      res.status(error.status || 500).json({
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+  );
+  http
+    .createServer(app)
+    .listen(process.env.PORT, () =>
+      console.log(`App listening on port ${process.env.PORT}`)
+    );
+}
+
+function addValidation(app: Application, doc: OpenAPIV3.Document) {
+  app.use(
+    OpenApiValidator.middleware({
+      validateSecurity: true,
+      apiSpec: "conduit.yml",
+      validateRequests: true, // (default)
+      validateResponses: false, // false by default
+      validateApiSpec: true,
+    })
   );
 }
 
-async function addDocumentation(app: Application, doc: OpenAPIV3.Document) {
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(doc));
+function registerHandler(
+  app: Application,
+  servers: OpenAPIV3.ServerObject[] | undefined,
+  verb: HttpVerb | "use",
+  path: string,
+  ...handlers: RequestHandler[]
+) {
+  if (!servers || !servers.length) {
+    app[verb](path, ...handlers);
+  } else {
+    servers.forEach((server) => {
+      app[verb](`${server.url}${path}`, ...handlers);
+    });
+  }
+}
+
+function addDocumentation(app: Application, doc: OpenAPIV3.Document) {
+  registerHandler(
+    app,
+    doc.servers,
+    "use",
+    "/docs",
+    ...swaggerUi.serve,
+    swaggerUi.setup(doc)
+  );
 }
 
 function createServer(): Application {
   const app: Application = express();
   app.use(cors());
-  app.use(json());
+  app.use(express.urlencoded({ extended: false }));
+  app.use(express.text());
+  app.use(express.json());
   return app;
 }
 
@@ -33,12 +99,13 @@ async function generatePaths(app: Application, doc: OpenAPIV3.Document) {
   const paths = doc.paths;
   Object.entries(paths).forEach(([pattern, path]) => {
     console.log(`Handling path: ${pathPatternToExpress(pattern)}`);
-    handlePattern(app, pattern, path);
+    handlePattern(app, doc, pathPatternToExpress(pattern), path);
   });
 }
 
 function handlePattern(
   app: Application,
+  doc: OpenAPIV3.Document,
   pattern: string,
   path: OpenAPIV3.PathItemObject
 ) {
@@ -61,7 +128,7 @@ function handlePattern(
       case "patch":
       case "trace":
         console.log(`- Adding operation: '${fieldName}'`);
-        generatePath(app, pattern, fieldName, value);
+        generatePath(app, doc, pattern, fieldName, value);
         return;
       default:
         throw new Error("Unsupported fieldName");
@@ -71,14 +138,22 @@ function handlePattern(
 
 function generatePath(
   app: Application,
+  doc: OpenAPIV3.Document,
   pattern: string,
   verb: HttpVerb,
   operation: OpenAPIV3.OperationObject
 ) {
-  app[verb](pattern, (req: Request, res: Response) => {
-    console.log("adding ");
-    res.sendStatus(200);
-  });
+  registerHandler(
+    app,
+    doc.servers || undefined,
+    verb,
+    pattern,
+    (req: Request, res: Response) => {
+      res
+        .status(200)
+        .json({ params: req.params, body: req.body, query: req.query });
+    }
+  );
 }
 
 start();
