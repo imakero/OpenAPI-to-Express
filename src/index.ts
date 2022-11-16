@@ -3,6 +3,7 @@ import { HttpVerb, OpenAPIV3 } from "./types";
 import express, { Application, json, Request, Response } from "express";
 import cors from "cors";
 import { pathPatternToExpress } from "./lib/helpers";
+import swaggerUi from "swagger-ui-express";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -10,10 +11,15 @@ async function start() {
   const filename = process.argv[2];
   const doc = (await parseYaml(filename)) as OpenAPIV3.Document;
   const app = createServer();
+  addDocumentation(app, doc);
   generatePaths(app, doc);
   app.listen(process.env.PORT, () =>
     console.log(`App listening on port ${process.env.PORT}`)
   );
+}
+
+async function addDocumentation(app: Application, doc: OpenAPIV3.Document) {
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(doc));
 }
 
 function createServer(): Application {
