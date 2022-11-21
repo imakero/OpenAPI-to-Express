@@ -8,16 +8,19 @@ import express, {
   Response,
 } from "express";
 import cors from "cors";
-import { expressPathToFilePath, pathPatternToExpress } from "./lib/helpers";
+import {
+  expressPathToFilePath,
+  httpVerbs,
+  pathPatternToExpress,
+} from "./lib/helpers";
 import swaggerUi from "swagger-ui-express";
-import * as OpenApiValidator from "express-openapi-validator";
 import http from "http";
 import dotenv from "dotenv";
 dotenv.config();
 
 async function start() {
   const filename = process.argv[2];
-  const doc = (await parseYaml(filename)) as OpenAPIV3.Document;
+  const doc = await parseYaml(filename);
   const app = createServer();
   addDocumentation(app, doc);
   addValidation(app, doc);
@@ -48,16 +51,42 @@ async function start() {
 }
 
 function addValidation(app: Application, doc: OpenAPIV3.Document) {
-  app.use(
-    OpenApiValidator.middleware({
-      validateSecurity: true,
-      apiSpec: "conduit.yml",
-      validateRequests: true, // (default)
-      validateResponses: false, // false by default
-      validateApiSpec: true,
-    })
-  );
+  const operationObjects = getAllOperations(doc);
+  operationObjects.forEach((operationObject) => {
+    app[operationObject.operation](operationObject.url, (req, res, next) => {
+      console.log(
+        "validation middleware for",
+        operationObject.operation,
+        operationObject.url
+      );
+      next();
+    });
+  });
 }
+
+const getServerObjects = (doc: OpenAPIV3.Document) =>
+  !doc.servers || !doc.servers.length ? [{ url: "/" }] : doc.servers;
+
+const getPathOperations = (path: OpenAPIV3.PathItemObject) =>
+  httpVerbs.filter((verb) => path[verb]);
+
+const getAllPathsOperations = (doc: OpenAPIV3.Document) =>
+  Object.entries(doc.paths).map(([url, pathItem]) => ({
+    url,
+    path: pathItem,
+    operations: getPathOperations(pathItem),
+  }));
+
+const getAllOperations = (doc: OpenAPIV3.Document) =>
+  getServerObjects(doc).flatMap((server) =>
+    getAllPathsOperations(doc).flatMap(({ url, path, operations }) =>
+      operations.map((operation) => ({
+        url: pathPatternToExpress(`${server.url}${url}`),
+        path,
+        operation,
+      }))
+    )
+  );
 
 async function registerHandler(
   app: Application,
@@ -108,7 +137,7 @@ function createServer(): Application {
 async function generatePaths(app: Application, doc: OpenAPIV3.Document) {
   const paths = doc.paths;
   Object.entries(paths).forEach(([pattern, path]) => {
-    console.log(`Handling path: ${pathPatternToExpress(pattern)}`);
+    //console.log(`Handling path: ${pathPatternToExpress(pattern)}`);
     handlePattern(app, doc, pathPatternToExpress(pattern), path);
   });
 }
@@ -137,7 +166,7 @@ function handlePattern(
       case "head":
       case "patch":
       case "trace":
-        console.log(`- Adding operation: '${fieldName}'`);
+        //console.log(`- Adding operation: '${fieldName}'`);
         generatePath(app, doc, pattern, fieldName, value);
         return;
       default:

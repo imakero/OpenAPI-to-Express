@@ -1,7 +1,18 @@
-export function pathPatternToExpress(pattern: string) {
-  return pattern.replace(/\{(.+?)\}/g, ":$1");
-}
+import { HttpVerb } from "../types";
 
-export function expressPathToFilePath(pattern: string) {
-  return pattern.replace(/:([^/]*)/g, "[$1]");
-}
+export const pathPatternToExpress = (pattern: string) =>
+  pattern.replace(/\{(.+?)\}/g, ":$1");
+
+export const expressPathToFilePath = (pattern: string) =>
+  pattern.replace(/:([^/]*)/g, "[$1]");
+
+export const httpVerbs: HttpVerb[] = [
+  "get",
+  "put",
+  "post",
+  "delete",
+  "options",
+  "head",
+  "patch",
+  "trace",
+];
