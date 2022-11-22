@@ -16,3 +16,8 @@ export const httpVerbs: HttpVerb[] = [
   "patch",
   "trace",
 ];
+
+export const shallowMapObject = (
+  object: object,
+  mapping: ([key, value]: [string, any]) => void
+) => Object.assign({}, ...Object.entries(object).map(mapping));

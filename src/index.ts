@@ -12,15 +12,21 @@ import {
   expressPathToFilePath,
   httpVerbs,
   pathPatternToExpress,
+  shallowMapObject,
 } from "./lib/helpers";
 import swaggerUi from "swagger-ui-express";
 import http from "http";
+import * as fs from "fs/promises";
 import dotenv from "dotenv";
 dotenv.config();
 
 async function start() {
   const filename = process.argv[2];
   const doc = await parseYaml(filename);
+
+  const derefDoc = JSON.stringify(dereferenceDocument(doc), null, 2);
+
+  fs.writeFile("out.txt", derefDoc);
   const app = createServer();
   addDocumentation(app, doc);
   addValidation(app, doc);
@@ -50,7 +56,47 @@ async function start() {
     );
 }
 
-function addValidation(app: Application, doc: OpenAPIV3.Document) {
+const dereferenceDocument = (doc: OpenAPIV3.Document): any => {
+  return dereferenceValue(doc, doc);
+};
+
+const dereferenceValue = (doc: OpenAPIV3.Document, value: any): any => {
+  if (
+    !value ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "undefined"
+  ) {
+    return value;
+  } else if (Array.isArray(value)) {
+    return value.map((entry) => dereferenceValue(doc, entry));
+  } else if (typeof value === "object") {
+    if (value["$ref"]) {
+      return dereferenceValue(doc, getReferencedDocument(doc, value["$ref"]));
+    } else {
+      return shallowMapObject(value, ([key, value]: [string, any]) => ({
+        [key]: dereferenceValue(doc, value),
+      }));
+    }
+  }
+};
+
+const getReferencedDocument = (doc: OpenAPIV3.Document, ref: string) => {
+  if (ref[0] === "#") {
+    const pathArray = getLocalReferencePathArray(ref);
+    return getValueAtPath(doc, pathArray);
+  } else {
+    throw new Error("this case is not handled yet");
+  }
+};
+
+const getValueAtPath = (doc: OpenAPIV3.Document, pathArray: string[]) =>
+  pathArray.reduce((current: any, key) => current[key], doc);
+
+const getLocalReferencePathArray = (ref: string) => ref.split("/").slice(1);
+
+const addValidation = (app: Application, doc: OpenAPIV3.Document) => {
   const operationObjects = getAllOperations(doc);
   operationObjects.forEach((operationObject) => {
     app[operationObject.operation](operationObject.url, (req, res, next) => {
@@ -62,7 +108,7 @@ function addValidation(app: Application, doc: OpenAPIV3.Document) {
       next();
     });
   });
-}
+};
 
 const getServerObjects = (doc: OpenAPIV3.Document) =>
   !doc.servers || !doc.servers.length ? [{ url: "/" }] : doc.servers;
