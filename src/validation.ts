@@ -1,7 +1,7 @@
 import { Application } from "express";
 import { getAllOperations } from "./lib/helpers";
 import { OpenAPIV3 } from "./types";
-import { generatePathParameterValidator } from "./validators/pathParameter";
+import { generateParameterValidator } from "./validators/parameter";
 import { generateRequestBodyValidator } from "./validators/requestBody";
 
 export const addValidation = (app: Application, doc: OpenAPIV3.Document) => {
@@ -9,9 +9,11 @@ export const addValidation = (app: Application, doc: OpenAPIV3.Document) => {
   operations.forEach((operation) => {
     const operationObject = operation.pathItem[operation.operation];
     const requestBodyValidator = generateRequestBodyValidator(operationObject);
+    const parameterValidator = generateParameterValidator(operationObject);
 
     app[operation.operation](operation.url, (req, res, next) => {
-      const errors = requestBodyValidator(req);
+      const validators = [requestBodyValidator, parameterValidator];
+      const errors = validators.flatMap((validator) => validator(req));
 
       if (errors.length) {
         return res.status(400).json({ errors, status: 400 });

@@ -10,10 +10,9 @@ export const generateSchemaValidator = (
   propertyName: string
 ) => {
   return (value: any): string[] => {
-    const typeValidatorResult = generateTypeValidator(
-      schema,
-      propertyName
-    )(value);
+    const typeValidatorResult = generateTypeValidator(schema, propertyName, {
+      parseNumber: propertyName.split(".")[0] === "params",
+    })(value);
 
     if (typeValidatorResult.length) {
       return typeValidatorResult;
