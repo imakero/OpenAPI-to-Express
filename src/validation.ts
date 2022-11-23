@@ -86,10 +86,9 @@ export const generateRequestBodyValidator = (
 
 export const generateSchemaValidator = (
   schema: OpenAPIV3.SchemaObject,
-  propertyName: string,
-  errors: string[] = []
+  propertyName: string
 ) => {
-  return (value: any) => {
+  return (value: any): string[] => {
     const typeValidatorResult = generateTypeValidator(
       schema,
       propertyName
@@ -102,6 +101,7 @@ export const generateSchemaValidator = (
     switch (schema.type) {
       case "null":
       case "boolean":
+      case "string":
         return [];
       case "number":
       case "integer":
@@ -119,10 +119,38 @@ export const generateSchemaValidator = (
 };
 
 export const generateObjectValidator =
-  (schema: OpenAPIV3.SchemaObject, propertyName: string) => (value: object) => {
-    const objectValidators = [generateRequiredValidator(schema, propertyName)];
+  (schema: OpenAPIV3.SchemaObject, propertyName: string) =>
+  (value: { [property: string]: any }) => {
+    const objectValidators = [
+      generateRequiredValidator(schema, propertyName),
+      generatePropertiesValidator(schema, propertyName),
+    ];
 
     return objectValidators.flatMap((validator) => validator(value));
+  };
+
+export const generatePropertiesValidator =
+  (schema: OpenAPIV3.SchemaObject, propertyName: string) => (value: any) => {
+    const properties = schema["properties"];
+
+    if (properties === undefined) {
+      return [];
+    }
+
+    return Object.entries(properties).flatMap(
+      ([subPropertyName, subSchema]) => {
+        if (!value[subPropertyName]) {
+          return [];
+        }
+
+        const schemaValidator = generateSchemaValidator(
+          subSchema as OpenAPIV3.SchemaObject,
+          `${propertyName}.${subPropertyName}`
+        );
+
+        return schemaValidator(value[subPropertyName]);
+      }
+    );
   };
 
 export const generateRequiredValidator =
