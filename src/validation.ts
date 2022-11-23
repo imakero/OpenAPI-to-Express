@@ -111,12 +111,39 @@ export const generateSchemaValidator = (
         const objectValidator = generateObjectValidator(schema, propertyName);
         return objectValidator(value);
       case "array":
-        return [];
+        const arrayValidator = generateArrayValidator(schema, propertyName);
+        return arrayValidator(value);
       default:
         throw new Error("Unsupported type");
     }
   };
 };
+
+export const generateArrayValidator =
+  (schema: OpenAPIV3.ArraySchemaObject, propertyName: string) =>
+  (value: any[]) => {
+    const arrayValidators = [generateItemsValidator(schema, propertyName)];
+
+    return arrayValidators.flatMap((validator) => validator(value));
+  };
+
+export const generateItemsValidator =
+  (schema: OpenAPIV3.ArraySchemaObject, propertyName: string) =>
+  (value: any[]) => {
+    const itemsSchema = schema["items"];
+
+    if (itemsSchema === undefined) {
+      return [];
+    }
+
+    return value.flatMap((item, index) => {
+      const schemaValidator = generateSchemaValidator(
+        itemsSchema as OpenAPIV3.SchemaObject,
+        `${propertyName}[${index}]`
+      );
+      return schemaValidator(item);
+    });
+  };
 
 export const generateObjectValidator =
   (schema: OpenAPIV3.SchemaObject, propertyName: string) =>
