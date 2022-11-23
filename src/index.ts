@@ -14,7 +14,8 @@ import http from "http";
 import * as fs from "fs/promises";
 import * as OpenApiValidator from "express-openapi-validator";
 import dotenv from "dotenv";
-import { addValidation, dereferenceDocument } from "./validation";
+import { addValidation } from "./validation";
+import { dereferenceDocument } from "./lib/dereference";
 dotenv.config();
 
 async function start() {
