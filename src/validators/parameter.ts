@@ -36,6 +36,17 @@ export const generateParameterValidator = (
           `params.${parameterName}`
         );
         return schemaValidator(req.params[parameterName]);
+      } else if (location === "query") {
+        if (req.query[parameterName] === undefined) {
+          return parameter["required"]
+            ? [`query.${parameterName} is required.`]
+            : [];
+        }
+        const schemaValidator = generateSchemaValidator(
+          schema as OpenAPIV3.SchemaObject,
+          `query.${parameterName}`
+        );
+        return schemaValidator(req.query[parameterName]);
       }
     });
 };

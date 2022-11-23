@@ -10,8 +10,9 @@ export const generateSchemaValidator = (
   propertyName: string
 ) => {
   return (value: any): string[] => {
+    const propertyPrefix = propertyName.split(".")[0];
     const typeValidatorResult = generateTypeValidator(schema, propertyName, {
-      parseNumber: propertyName.split(".")[0] === "params",
+      parseNumber: ["params", "query"].includes(propertyPrefix),
     })(value);
 
     if (typeValidatorResult.length) {

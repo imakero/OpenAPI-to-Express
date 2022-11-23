@@ -23,7 +23,10 @@ export const generateTypeValidator = (
           return typeof value === type;
         case "integer":
           if (options.parseNumber && typeof value === "string") {
-            return !Number.isNaN(parseFloat(value));
+            return (
+              !Number.isNaN(parseInt(value)) &&
+              parseInt(value) === parseFloat(value)
+            );
           }
           return parseInt(value) === value;
         case "array":
