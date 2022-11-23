@@ -3,6 +3,7 @@ import {
   httpVerbs,
   pathPatternToExpress,
   shallowMapObject,
+  validateDateTime,
 } from "./lib/helpers";
 import { OpenAPIV3 } from "./types";
 
@@ -102,7 +103,8 @@ export const generateSchemaValidator = (
       case "null":
       case "boolean":
       case "string":
-        return [];
+        const stringValidator = generateStringValidator(schema, propertyName);
+        return stringValidator(value);
       case "number":
       case "integer":
         const numberValidator = generateNumberValidator(schema, propertyName);
@@ -118,6 +120,26 @@ export const generateSchemaValidator = (
     }
   };
 };
+
+export const generateStringValidator =
+  (schema: OpenAPIV3.SchemaObject, propertyName: string) => (value: string) => {
+    const stringValidators = [generateDateTimeValidator(schema, propertyName)];
+
+    return stringValidators.flatMap((validator) => validator(value));
+  };
+
+export const generateDateTimeValidator =
+  (schema: OpenAPIV3.SchemaObject, propertyName: string) => (value: string) => {
+    const format = schema["format"];
+
+    if (format === undefined || format !== "date-time") {
+      return [];
+    }
+
+    return validateDateTime(value)
+      ? []
+      : [`${propertyName} is not a valid datetime value.`];
+  };
 
 export const generateArrayValidator =
   (schema: OpenAPIV3.ArraySchemaObject, propertyName: string) =>
