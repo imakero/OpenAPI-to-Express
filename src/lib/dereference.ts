@@ -10,20 +10,20 @@ export const dereferenceValue = (doc: OpenAPIV3.Document, value: any): any => {
     !value ||
     typeof value === "string" ||
     typeof value === "number" ||
-    typeof value === "boolean" ||
-    typeof value === "undefined"
+    typeof value === "boolean"
   ) {
     return value;
   } else if (Array.isArray(value)) {
     return value.map((entry) => dereferenceValue(doc, entry));
   } else if (typeof value === "object") {
-    if (value["$ref"]) {
-      return dereferenceValue(doc, getReferencedDocument(doc, value["$ref"]));
-    } else {
-      return shallowMapObject(value, ([key, value]: [string, any]) => ({
-        [key]: dereferenceValue(doc, value),
-      }));
-    }
+    return shallowMapObject(value, ([key, value]: [string, any]) => {
+      return {
+        [key]: dereferenceValue(
+          doc,
+          key === "$ref" ? getReferencedDocument(doc, value) : value
+        ),
+      };
+    });
   }
 };
 
