@@ -48,7 +48,7 @@ async function start() {
   );
   http
     .createServer(app)
-    .listen(process.env.PORT, () =>
+    .listen(process.env.PORT || 3000, () =>
       console.log(`App listening on port ${process.env.PORT}`)
     );
 }
@@ -144,7 +144,7 @@ function handlePattern(
       case "patch":
       case "trace":
         //console.log(`- Adding operation: '${fieldName}'`);
-        generatePath(app, doc, pattern, fieldName, value);
+        generatePath(app, doc, pattern, fieldName);
         return;
       default:
         throw new Error("Unsupported fieldName");
@@ -156,8 +156,7 @@ async function generatePath(
   app: Application,
   doc: OpenAPIV3.Document,
   pattern: string,
-  verb: HttpVerb,
-  operation: OpenAPIV3.OperationObject
+  verb: HttpVerb
 ) {
   registerHandler(app, doc.servers || undefined, verb, pattern);
 }

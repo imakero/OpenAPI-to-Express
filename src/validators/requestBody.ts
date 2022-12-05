@@ -35,6 +35,11 @@ export const generateRequestBodyValidator = (
 
     const schemaValidator = generateSchemaValidator(bodySchema, "body");
 
+    // console.log(
+    //   "VALIDATOR",
+    //   generateSchemaValidator(bodySchema, "body").toString()
+    // );
+
     return schemaValidator(req.body);
   };
 };

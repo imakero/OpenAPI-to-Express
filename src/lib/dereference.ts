@@ -16,14 +16,13 @@ export const dereferenceValue = (doc: OpenAPIV3.Document, value: any): any => {
   } else if (Array.isArray(value)) {
     return value.map((entry) => dereferenceValue(doc, entry));
   } else if (typeof value === "object") {
-    return shallowMapObject(value, ([key, value]: [string, any]) => {
-      return {
-        [key]: dereferenceValue(
-          doc,
-          key === "$ref" ? getReferencedDocument(doc, value) : value
-        ),
-      };
-    });
+    if (value["$ref"]) {
+      return dereferenceValue(doc, getReferencedDocument(doc, value["$ref"]));
+    } else {
+      return shallowMapObject(value, ([key, value]: [string, any]) => ({
+        [key]: dereferenceValue(doc, value),
+      }));
+    }
   }
 };
 
