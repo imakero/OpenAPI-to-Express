@@ -8,28 +8,25 @@ import express, {
   Response,
 } from "express";
 import cors from "cors";
-import {
-  expressPathToFilePath,
-  httpVerbs,
-  pathPatternToExpress,
-  shallowMapObject,
-} from "./lib/helpers";
+import { expressPathToFilePath, pathPatternToExpress } from "./lib/helpers";
 import swaggerUi from "swagger-ui-express";
 import http from "http";
 import * as fs from "fs/promises";
+import * as OpenApiValidator from "express-openapi-validator";
 import dotenv from "dotenv";
+import { addValidation } from "./validation";
+import { dereferenceDocument } from "./lib/dereference";
 dotenv.config();
 
 async function start() {
   const filename = process.argv[2];
   const doc = await parseYaml(filename);
+  const dereferencedDocument = dereferenceDocument(doc);
 
-  const derefDoc = JSON.stringify(dereferenceDocument(doc), null, 2);
-
-  fs.writeFile("out.txt", derefDoc);
   const app = createServer();
   addDocumentation(app, doc);
-  addValidation(app, doc);
+  addValidation(app, dereferencedDocument);
+  //addExpressValidation(app, doc);
   generatePaths(app, doc);
 
   app.use(
@@ -56,83 +53,17 @@ async function start() {
     );
 }
 
-const dereferenceDocument = (doc: OpenAPIV3.Document): any => {
-  return dereferenceValue(doc, doc);
-};
-
-const dereferenceValue = (doc: OpenAPIV3.Document, value: any): any => {
-  if (
-    !value ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    typeof value === "undefined"
-  ) {
-    return value;
-  } else if (Array.isArray(value)) {
-    return value.map((entry) => dereferenceValue(doc, entry));
-  } else if (typeof value === "object") {
-    if (value["$ref"]) {
-      return dereferenceValue(doc, getReferencedDocument(doc, value["$ref"]));
-    } else {
-      return shallowMapObject(value, ([key, value]: [string, any]) => ({
-        [key]: dereferenceValue(doc, value),
-      }));
-    }
-  }
-};
-
-const getReferencedDocument = (doc: OpenAPIV3.Document, ref: string) => {
-  if (ref[0] === "#") {
-    const pathArray = getLocalReferencePathArray(ref);
-    return getValueAtPath(doc, pathArray);
-  } else {
-    throw new Error("this case is not handled yet");
-  }
-};
-
-const getValueAtPath = (doc: OpenAPIV3.Document, pathArray: string[]) =>
-  pathArray.reduce((current: any, key) => current[key], doc);
-
-const getLocalReferencePathArray = (ref: string) => ref.split("/").slice(1);
-
-const addValidation = (app: Application, doc: OpenAPIV3.Document) => {
-  const operationObjects = getAllOperations(doc);
-  operationObjects.forEach((operationObject) => {
-    app[operationObject.operation](operationObject.url, (req, res, next) => {
-      console.log(
-        "validation middleware for",
-        operationObject.operation,
-        operationObject.url
-      );
-      next();
-    });
-  });
-};
-
-const getServerObjects = (doc: OpenAPIV3.Document) =>
-  !doc.servers || !doc.servers.length ? [{ url: "/" }] : doc.servers;
-
-const getPathOperations = (path: OpenAPIV3.PathItemObject) =>
-  httpVerbs.filter((verb) => path[verb]);
-
-const getAllPathsOperations = (doc: OpenAPIV3.Document) =>
-  Object.entries(doc.paths).map(([url, pathItem]) => ({
-    url,
-    path: pathItem,
-    operations: getPathOperations(pathItem),
-  }));
-
-const getAllOperations = (doc: OpenAPIV3.Document) =>
-  getServerObjects(doc).flatMap((server) =>
-    getAllPathsOperations(doc).flatMap(({ url, path, operations }) =>
-      operations.map((operation) => ({
-        url: pathPatternToExpress(`${server.url}${url}`),
-        path,
-        operation,
-      }))
-    )
+function addExpressValidation(app: Application, doc: OpenAPIV3.Document) {
+  app.use(
+    OpenApiValidator.middleware({
+      validateSecurity: true,
+      apiSpec: "conduit.yml",
+      validateRequests: true, // (default)
+      validateResponses: false, // false by default
+      validateApiSpec: true,
+    })
   );
+}
 
 async function registerHandler(
   app: Application,
