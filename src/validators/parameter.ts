@@ -47,6 +47,8 @@ export const generateParameterValidator = (
           `query.${parameterName}`
         );
         return schemaValidator(req.query[parameterName]);
+      } else {
+        throw new Error("Not supported!");
       }
     });
 };
